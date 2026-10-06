@@ -1,89 +1,86 @@
-# Computational Biology MSc | Single-Cell & Bulk RNA-Seq Researcher
+# Characterising Immune-hot and Immune-cold Tumour Microenvironment in Head and Neck Squamous Cell Carcinoma: Integrating TCGA Bulk RNA-Sequencing Immune Deconvolution with Single-Cell Transcriptomic Profiling
 
-Recent Master's graduate specialised in **transcriptomics, cancer genomics, and
-mathematical modelling** using R and Python. My MSc thesis built an end-to-end
-R pipeline that integrates TCGA bulk RNA-seq with single-cell RNA-seq to study
-the tumour immune microenvironment in head and neck cancer.
+![R](https://img.shields.io/badge/R-4.6-276DC3?logo=r&logoColor=white)
+![Seurat](https://img.shields.io/badge/Seurat-scRNA--seq-6A5ACD)
+![DESeq2](https://img.shields.io/badge/Bioconductor-DESeq2-1F8DD6)
+![renv](https://img.shields.io/badge/reproducible-renv-2E8B57)
 
-🎓 Currently applying for PhD positions in computational biology / cancer genomics.
+*MSc thesis analysis pipeline, written in R.* This page gives an overview of
+the workflow and methods. The source code is kept in a private repository and
+is available on request.
 
-## Skills
+## Summary
 
-| Area | Tools |
-|---|---|
-| **Languages** | R, Python, Bash |
-| **Single-cell RNA-seq** | Seurat (SCTransform, Louvain clustering, UMAP), SingleR, celldex, MAST, pseudobulk DE |
-| **Bulk RNA-seq** | DESeq2 (apeglm shrinkage), TCGAbiolinks, GDC / cBioPortal data |
-| **Tumour microenvironment** | immunedeconv: MCP-counter, xCell, ESTIMATE |
-| **Pathway analysis** | clusterProfiler (GSEA, ORA), GO / KEGG, enrichplot |
-| **Statistics & survival** | survival (Kaplan–Meier, Cox PH), k-means, non-parametric testing |
-| **Visualisation** | ggplot2, pheatmap |
-| **Reproducibility** | Git / GitHub, renv, Bioconductor, RStudio |
+Head and neck squamous cell carcinoma (HNSC) responds unevenly to
+immunotherapy, and HPV-positive and HPV-negative tumours behave as clinically
+distinct diseases. This pipeline classifies TCGA-HNSC tumours as
+**immune-hot** or **immune-cold** using three immune-deconvolution methods,
+then characterises the groups with differential expression, pathway
+enrichment and survival analysis. A single-cell RNA-seq pipeline then
+annotates cell types and compares the cellular composition and
+cell-type-specific expression of HPV+ and HPV− tumours.
 
-## MSc thesis project
-
-**Characterising Immune-hot and Immune-cold Tumour Microenvironment in Head and
-Neck Squamous Cell Carcinoma: Integrating TCGA Bulk RNA-Sequencing Immune
-Deconvolution with Single-Cell Transcriptomic Profiling**
-
-*The code is in a private repository, and access is available on request.*
-
-### Workflow
+## Workflow
 
 ```mermaid
 flowchart LR
     subgraph BULK["Bulk RNA-seq · TCGA-HNSC"]
         A[GDC STAR counts<br/>TCGAbiolinks] --> B[Immune deconvolution<br/>MCP-counter · xCell · ESTIMATE]
         B --> C[Unsupervised clustering<br/>Immune-hot / cold]
-        C --> D[DESeq2 + apeglm<br/>GSEA / ORA]
-        C --> E[Clinical association<br/>Kaplan–Meier · Cox PH]
+        C --> D[DESeq2 + apeglm<br/>GSEA / ORA · clusterProfiler]
+        C --> E[HPV association<br/>Kaplan–Meier · Cox PH]
     end
-    subgraph SC["scRNA-seq · public GEO dataset"]
+    subgraph SC["Single-cell RNA-seq · HNSC"]
         F[UMI counts] --> G[Per-tissue MAD QC<br/>SCTransform]
         G --> H[PCA · Louvain · UMAP]
         H --> I[SingleR + marker panels<br/>cell-type annotation]
-        I --> J[Composition analysis<br/>pseudobulk DE · GSEA]
+        I --> J[Composition by HPV<br/>pseudobulk DE · ORA / GSEA]
     end
 ```
 
-### What I implemented
+## Repository structure (private)
 
-| Step | Implementation | Why |
-|---|---|---|
-| scRNA QC | 3 × MAD thresholds on log10 counts / genes / mito%, computed per tissue type | Library complexity differs by tissue, so a single global cutoff would mis-filter |
-| Normalisation | SCTransform v2 (glmGamPoi), regressing mito% | Removes sequencing-depth and mitochondrial technical variance |
-| Clustering & annotation | PCA → SNN graph → Louvain → UMAP; SingleR + canonical markers | Reference-based labels cross-checked with marker validation |
-| Single-cell DE | Pseudobulk DESeq2 (counts summed per patient per cell type) | Avoids pseudo-replication from treating cells as independent samples |
-| Bulk immune phenotyping | Three deconvolution tools, with one held out for independent validation | Guards against circular validation |
-| Bulk DE & pathways | DESeq2 + apeglm shrinkage; clusterProfiler ORA and GSEA | GSEA captures coordinated sub-threshold shifts that ORA misses |
-| Survival | Kaplan–Meier, log-rank, multivariable Cox PH | Tests independence from known clinical covariates |
-| Reproducibility | Numbered scripts, relative paths, checkpointing, `renv` lockfile | Anyone can re-run the pipeline end-to-end |
-
-### Code sample: tissue-aware QC (Seurat / dplyr)
-
-```r
-## Thresholds are computed per tissue type (3 x MAD on log10 scale) because
-## library size/complexity differs systematically by tissue, so a single
-## global cutoff would over- or under-filter some tissues.
-mad_thresholds <- qc_metrics %>%
-  group_by(tissuetype) %>%
-  summarise(
-    nCount_med   = median(log10_nCount),   nCount_mad   = mad(log10_nCount),
-    nFeature_med = median(log10_nFeature), nFeature_mad = mad(log10_nFeature),
-    mt_med       = median(log10_mt),       mt_mad       = mad(log10_mt),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    nCount_lower   = nCount_med   - 3 * nCount_mad,
-    nCount_upper   = nCount_med   + 3 * nCount_mad,
-    nFeature_lower = nFeature_med - 3 * nFeature_mad,
-    nFeature_upper = nFeature_med + 3 * nFeature_mad,
-    # Mito%: only high values indicate dying cells, so upper bound only
-    mt_upper       = mt_med + 3 * mt_mad
-  )
+```
+.
+├── bulk_seq_analysis/          # bulk RNA-seq track, run in numeric order
+│   ├── 01_download_HNSC_TCGAbiolinks.R          # GDC download (STAR counts)
+│   ├── 02_import_HNSC_clinical_2018.R           # clinical / HPV / survival import
+│   ├── 03_run_immune_deconvolution.R            # MCP-counter, xCell, ESTIMATE
+│   ├── 04_plot_immune_classification.R          # immune-hot / cold classification
+│   ├── 05_plot_immune_scores_by_tool.R          # validation across tools
+│   ├── 06_run_de_pathway_immune_hot_vs_cold.R   # DESeq2 + GO/KEGG ORA and GSEA
+│   ├── 07_visualise_de_immune_hot_vs_cold.R     # volcano, heatmaps
+│   ├── 08_correlate_genes_with_immunescore.R    # gene–immune score correlation
+│   └── 09_clinical_association_immune_hot_vs_cold.R  # Fisher, KM, Cox PH
+├── scRNA_analysis/             # single-cell track
+│   └── 01_run_scRNAseq_pipeline.R   # QC → SCTransform → clustering → annotation →
+│                                    # HPV composition → pseudobulk DE → ORA / GSEA
+└── renv.lock                   # pinned package versions
 ```
 
-## Contact
+## Methods implemented
 
-Full thesis code and results are available on request; contact details are
-on my CV.
+| Step | Implementation | Rationale |
+|---|---|---|
+| scRNA QC | 3 × MAD on log10 counts / genes / mito%, computed **per tissue type** | Library complexity differs by tissue, so one global cutoff would over- or under-filter |
+| Normalisation | SCTransform v2 (glmGamPoi), regressing mito% | Removes sequencing-depth and mitochondrial technical variance |
+| Clustering | PCA → shared-nearest-neighbour graph → Louvain → UMAP | PCs chosen from the elbow plot; checkpoints saved after expensive steps |
+| Annotation | SingleR (celldex reference) + canonical marker panels | Combines reference-based labels with marker validation |
+| scRNA DE | Pseudobulk DESeq2 (counts summed per patient per cell type) | Avoids pseudo-replication from treating cells of one patient as independent |
+| Bulk immune groups | Clustering on deconvolution scores, with one tool held out | Keeps an independent method for validation |
+| Bulk DE | DESeq2 Wald test with apeglm LFC shrinkage | Shrinkage stabilises fold changes for low-count genes |
+| Pathways | clusterProfiler ORA and GSEA (GO BP, KEGG) | GSEA catches coordinated sub-threshold shifts that ORA misses |
+| Survival | Kaplan–Meier, log-rank, uni- and multivariable Cox PH | Tests whether the immune phenotype is prognostic independently of HPV |
+
+## Reproducibility practices
+
+- Scripts numbered in run order, one analysis stage per script
+- All paths relative to the project root, with no machine-specific paths
+- Package versions pinned with [`renv`](https://rstudio.github.io/renv/)
+- Checkpoints saved after expensive steps (SCTransform, clustering), so the
+  pipeline can resume after a failure
+- Raw data and outputs kept out of version control
+
+## Access
+
+The full source code is available on request.
