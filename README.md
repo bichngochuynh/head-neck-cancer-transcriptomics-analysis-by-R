@@ -1,13 +1,13 @@
 # Characterising Immune-hot and Immune-cold Tumour Microenvironment in Head and Neck Squamous Cell Carcinoma: Integrating TCGA Bulk RNA-Sequencing Immune Deconvolution with Single-Cell Transcriptomic Profiling
 
 ![R](https://img.shields.io/badge/R-4.6-276DC3?logo=r&logoColor=white)
-![Seurat](https://img.shields.io/badge/Seurat-scRNA--seq-6A5ACD)
+![Seurat](https://img.shields.io/badge/Seurat-v5-6A5ACD)
 ![DESeq2](https://img.shields.io/badge/Bioconductor-DESeq2-1F8DD6)
 ![renv](https://img.shields.io/badge/reproducible-renv-2E8B57)
 
-*MSc thesis analysis pipeline, written in R.* This page gives an overview of
-the workflow and methods. The source code is kept in a private repository and
-is available on request.
+*MSc in Precision Medicine thesis, UCD School of Medicine (2026). Analysis pipeline written
+in R.* This page gives an overview of the workflow, key figures and methods. The source code
+is kept in a private repository and is available on request.
 
 ## Abstract
 
@@ -17,26 +17,77 @@ HPV-positive tumours were significantly enriched in the immune-hot group, but HP
 
 Single-cell RNA-seq data from GSE181919 were then used to interpret the bulk findings at cell-type level. HPV-associated gene-expression differences were mainly linked to epithelial cells, while B/plasma cells showed the strongest immune-cell-associated signal. Overall, this study shows that HPV status and immune phenotype are related but distinct features of HNSCC biology. Classifying tumours by immune-hot and immune-cold states may help describe tumour immune heterogeneity and guide future studies, but further validation is needed before clinical use.
 
+## Research questions
+
+1. Can immune infiltration patterns in TCGA-HNSC bulk RNA-seq classify tumours into immune-hot
+   and immune-cold subtypes, and what genes define these groups?
+2. Is HPV positivity significantly enriched in the immune-hot subgroup at the population level?
+3. Which single-cell populations and transcriptional programmes are associated with HPV status?
+
 ## Workflow
 
 ```mermaid
 flowchart TB
-    subgraph BULK["Stage 1 · Bulk RNA-seq · TCGA-HNSC"]
+    subgraph BULK["Stage 1 · Bulk RNA-seq · TCGA-HNSC (n = 520)"]
         direction LR
         A[GDC STAR counts<br/>TCGAbiolinks] --> B[Immune deconvolution<br/>MCP-counter · xCell · ESTIMATE]
-        B --> C[Unsupervised clustering<br/>Immune-hot / cold]
+        B --> C[k-means k = 2<br/>Immune-hot / cold]
         C --> D[DESeq2 + apeglm<br/>GSEA / ORA · clusterProfiler]
-        C --> E[HPV association<br/>Kaplan–Meier · Cox PH]
+        C --> E[HPV association · survival<br/>Fisher · Kaplan–Meier · Cox PH]
     end
-    subgraph SC["Stage 2 · Single-cell RNA-seq · HNSC"]
+    subgraph SC["Stage 2 · Single-cell RNA-seq · GSE181919 (23 patients)"]
         direction LR
         F[UMI counts] --> G[Per-tissue MAD QC<br/>SCTransform]
         G --> H[PCA · Louvain · UMAP]
-        H --> I[SingleR + marker panels<br/>cell-type annotation]
-        I --> J[Composition by HPV<br/>pseudobulk DE · ORA / GSEA]
+        H --> I[Markers + SingleR<br/>cell-type annotation]
+        I --> J[Composition by HPV<br/>pseudobulk DE]
     end
     BULK ==> SC
 ```
+
+## Key figures
+
+### Figure 1: HPV-positive tumours are enriched in the immune-hot group, but HPV status and immune phenotype are not the same (Stage 1)
+
+![HPV status by immune group](figures/fig1_HPV_by_immune_group.png)
+
+*Thesis Figure 5.* Among 487 tumours with known HPV status, HPV-positive tumours made up
+**32.6% of the immune-hot group vs 8.2% of the immune-cold group** (Fisher's exact test:
+OR = 5.41, 95% CI 3.11–9.54, p = 2.22 × 10⁻¹⁰).
+
+**Interpretation:** most immune-hot tumours (89 of 132, 67.4%) were nonetheless
+**HPV-negative**. Immune infiltration is therefore not just a proxy for HPV status, and an
+HPV-only classification would miss this immune-hot / HPV-negative subgroup. This finding
+supports the immune-phenotype-first approach.
+
+### Figure 2: HPV status, not immune phenotype alone, is associated with overall survival (Stage 1)
+
+![Overall survival by HPV status and immune group](figures/fig2_overall_survival.jpg)
+
+*Thesis Figure 6.* Kaplan–Meier overall survival by (A) HPV status, (B) immune group and
+(C) both combined. HPV-positive patients had significantly better survival (log-rank
+p = 0.0032; Cox HR = 0.48, 95% CI 0.29–0.79). Immune group alone was not significant
+(log-rank p = 0.126; HR = 0.78, 95% CI 0.57–1.07).
+
+**Interpretation:** an immune-hot phenotype does not automatically mean better survival.
+This may reflect immune activation coexisting with immunoregulation, since immune-hot
+tumours also showed higher Treg signals and checkpoint genes such as *BTLA* and *CD96*.
+Panel C is exploratory only.
+
+### Figure 3: Single-cell atlas of 53,445 cells resolved into nine cell populations (Stage 2)
+
+![UMAP clustering and annotation](figures/fig3_scRNA_UMAP_annotation.png)
+
+*Thesis Figure 7.* (A) Unsupervised Louvain clustering gave 24 clusters. (B) SingleR
+reference-based labels. (C) Final annotation into nine populations, combining cluster
+markers, canonical lineage markers and SingleR.
+
+**Interpretation:** the clusters separate cleanly by lineage, and SingleR broadly agrees
+with the marker-based labels. This provides a reliable cell-type framework for interpreting
+the bulk signals. On this framework, HPV-associated expression differences came mainly from
+**epithelial cells** (573 DEGs), while **B/plasma cells** showed the strongest
+immune-associated signal (*CD79B*, *SYK*, *LRMP* higher in HPV+). This is consistent with the
+B-cell signal (*SPIB*, *TLR10*) seen in bulk immune-hot tumours.
 
 ## Repository structure (private)
 
@@ -62,32 +113,110 @@ flowchart TB
 
 ### Stage 1: Bulk RNA-seq (TCGA-HNSC)
 
-| Step | Implementation | Rationale |
-|---|---|---|
-| Immune deconvolution | MCP-counter, xCell and ESTIMATE (immunedeconv) | Three independent estimates of immune infiltration |
-| Immune groups | Clustering on deconvolution scores, with one tool held out | Keeps an independent method for validation |
-| Differential expression | DESeq2 Wald test with apeglm LFC shrinkage | Shrinkage stabilises fold changes for low-count genes |
-| Pathways | clusterProfiler ORA and GSEA (GO BP, KEGG) | GSEA catches coordinated sub-threshold shifts that ORA misses |
-| Survival | Kaplan–Meier, log-rank, uni- and multivariable Cox PH | Tests whether the immune phenotype is prognostic independently of HPV |
+| Step | Implementation |
+|---|---|
+| Data | 520 primary tumours (GDC, TCGAbiolinks); raw counts for DESeq2, TPM for deconvolution; clinical data from cBioPortal PanCancer Atlas |
+| Immune deconvolution | MCP-counter, ESTIMATE and xCell |
+| Immune groups | k-means (k = 2) on seven z-scored MCP-counter immune populations |
+| Differential expression | DESeq2 (`~ImmuneGroup`), apeglm shrinkage; DEGs = BH-adjusted p < 0.05 and abs(log2FC) > 0.5 |
+| Pathways | clusterProfiler ORA and GSEA (GO BP, KEGG) |
+| Clinical | Fisher's exact test (HPV × immune group); Kaplan–Meier, log-rank, Cox PH |
 
-### Stage 2: Single-cell RNA-seq
+### Stage 2: Single-cell RNA-seq (GSE181919)
 
-| Step | Implementation | Rationale |
-|---|---|---|
-| QC | 3 × MAD on log10 counts / genes / mito%, computed **per tissue type** | Library complexity differs by tissue, so one global cutoff would over- or under-filter |
-| Normalisation | SCTransform v2 (glmGamPoi), regressing mito% | Removes sequencing-depth and mitochondrial technical variance |
-| Clustering | PCA → shared-nearest-neighbour graph → Louvain → UMAP | PCs chosen from the elbow plot; checkpoints saved after expensive steps |
-| Annotation | SingleR (celldex reference) + canonical marker panels | Combines reference-based labels with marker validation |
-| Differential expression | Pseudobulk DESeq2 (counts summed per patient per cell type), then ORA / GSEA | Avoids pseudo-replication from treating cells of one patient as independent |
+| Step | Implementation |
+|---|---|
+| Data | 54,239 cells, 23 patients, four tissue compartments (normal, leukoplakia, carcinoma, lymph-node metastasis) |
+| QC | 3 × MAD on UMI counts, detected genes and mito%, computed per tissue compartment |
+| Normalisation | SCTransform, regressing mito% |
+| Clustering | PCA (first 20 PCs) → Louvain → UMAP |
+| Annotation | FindAllMarkers + canonical lineage markers, cross-checked with SingleR (Human Primary Cell Atlas) |
+| Composition | Patient-level proportions, Wilcoxon rank-sum test with BH correction |
+| Differential expression | Patient-level pseudobulk DESeq2 (all cells and per cell type) |
+
+## Rationale behind the analytical choices
+
+**Immune phenotype first, HPV second.** Many studies split tumours by HPV status first, which
+can hide immune differences within both groups. Here, immune groups were defined without
+using HPV, and HPV and survival were then tested against them.
+
+**Three deconvolution tools, each with one job.** Each tool uses different reference
+signatures and has its own biases, so no single estimate was trusted on its own.
+- *MCP-counter* defined the clusters, because its scores are comparable between samples.
+- *ESTIMATE ImmuneScore* was used only to **label** the clusters: the cluster with the higher
+  score was called hot.
+- *xCell* was kept out of both steps and used as an **independent check**.
+
+This separation avoids circular validation, where a group would be "confirmed" by the same
+score that defined it.
+
+**Seven immune populations for clustering, three held out.** Clustering used only lymphoid
+and myeloid immune populations. Neutrophils, endothelial cells and fibroblasts were held out
+as comparison populations, so that the split reflects immune infiltration rather than stromal
+content. Scores were z-scored so that no single cell type dominates the k-means distance.
+
+**k-means with k = 2.** The hot/cold framework is widely used and easy to interpret. Bulk data
+cannot capture the third, spatial "immune-excluded" phenotype, so a two-group split was the
+appropriate scope.
+
+**DESeq2 with apeglm shrinkage.** DESeq2 models raw counts with a negative binomial
+distribution. apeglm shrinks unreliable fold changes from low-count genes, making gene
+rankings and volcano plots more trustworthy without changing the p-values.
+
+**Per-compartment QC.** Normal mucosa, leukoplakia, carcinoma and lymph-node tissue have
+different sequencing characteristics. Adaptive MAD thresholds within each compartment avoid
+over-filtering tissues with naturally lower RNA content.
+
+**Markers first, SingleR as a cross-check.** Cluster markers and canonical genes (*CD3D*,
+*CD79A*, *MZB1*, *CD68*, *EPCAM*, *DCN*, …) set the labels. SingleR provided an independent,
+reference-based check rather than the final answer.
+
+**Patient as the unit of replication.** Cells from the same patient are not independent, so
+treating thousands of cells as replicates inflates significance. Composition was therefore
+tested on per-patient proportions, and differential expression used patient-level pseudobulk
+profiles.
+
+## Limitations and validation
+
+**Validation performed**
+- **Independent tool:** xCell, which was not used for clustering or labelling, confirmed broad
+  enrichment of adaptive and myeloid immune signals in immune-hot tumours.
+- **Honest negatives:** the MCP-counter NK-cell difference was *not* reproduced by xCell
+  (p = 0.77), so NK cells were not treated as a robust discriminator.
+- **Held-out populations:** neutrophils and fibroblasts did not differ between groups, which
+  confirms that the split is immune-driven.
+- **Annotation:** labels were supported by three lines of evidence (cluster markers, canonical
+  markers, SingleR) and checked with violin plots.
+- **Statistical safeguards:** BH multiple-testing correction, patient-level testing and
+  pseudobulk DE.
+
+**Limitations**
+- **Inferred, not measured:** immune-hot/cold labels come from transcriptomic deconvolution,
+  not direct immune-cell counts.
+- **Retrospective public data:** HPV status was available for 487 of 520 tumours, and survival
+  was a secondary analysis with no adjustment for stage, smoking or treatment.
+- **Small single-cell cohort:** 7 HPV+ vs 16 HPV− patients gives limited power. No cell-type
+  proportion difference remained significant after correction (all adjusted p ≥ 0.12).
+- **Separate cohorts:** the bulk and single-cell data come from different patients, so the
+  cell-type interpretation is supportive context rather than direct proof.
+- **No spatial, histological, protein-level or functional validation.** Proposed
+  interpretations, such as tertiary lymphoid structure (TLS)-associated B-cell biology, remain
+  hypotheses. Findings are transcriptomic associations and need independent, site-specific
+  cohorts before any clinical use.
 
 ## Reproducibility practices
 
 - Scripts numbered in run order, one analysis stage per script
 - All paths relative to the project root, with no machine-specific paths
 - Package versions pinned with [`renv`](https://rstudio.github.io/renv/)
-- Checkpoints saved after expensive steps (SCTransform, clustering), so the
-  pipeline can resume after a failure
+- Checkpoints saved after expensive steps (SCTransform, clustering), so the pipeline can
+  resume after a failure
 - Raw data and outputs kept out of version control
+
+## Acknowledgements
+
+Principal Supervisor: **Asst. Prof. Arman Rahman** · Supervisor: **Dr. Mahsa Mirzaei**.
+Funded by **Irish Aid** through the **Ireland Fellows Programme**.
 
 ## Access
 
