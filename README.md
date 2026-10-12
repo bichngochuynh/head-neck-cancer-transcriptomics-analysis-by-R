@@ -176,9 +176,8 @@ treating thousands of cells as replicates inflates significance. Composition was
 tested on per-patient proportions, and differential expression used patient-level pseudobulk
 profiles.
 
-## Limitations and validation
+## Validation
 
-**Validation performed**
 - **Independent tool:** xCell, which was not used for clustering or labelling, confirmed broad
   enrichment of adaptive and myeloid immune signals in immune-hot tumours.
 - **Honest negatives:** the MCP-counter NK-cell difference was *not* reproduced by xCell
@@ -189,20 +188,6 @@ profiles.
   markers, SingleR) and checked with violin plots.
 - **Statistical safeguards:** BH multiple-testing correction, patient-level testing and
   pseudobulk DE.
-
-**Limitations**
-- **Inferred, not measured:** immune-hot/cold labels come from transcriptomic deconvolution,
-  not direct immune-cell counts.
-- **Retrospective public data:** HPV status was available for 487 of 520 tumours, and survival
-  was a secondary analysis with no adjustment for stage, smoking or treatment.
-- **Small single-cell cohort:** 7 HPV+ vs 16 HPV− patients gives limited power. No cell-type
-  proportion difference remained significant after correction (all adjusted p ≥ 0.12).
-- **Separate cohorts:** the bulk and single-cell data come from different patients, so the
-  cell-type interpretation is supportive context rather than direct proof.
-- **No spatial, histological, protein-level or functional validation.** Proposed
-  interpretations, such as tertiary lymphoid structure (TLS)-associated B-cell biology, remain
-  hypotheses. Findings are transcriptomic associations and need independent, site-specific
-  cohorts before any clinical use.
 
 ## Reproducibility practices
 
@@ -216,7 +201,6 @@ profiles.
 ## Acknowledgements
 
 Principal Supervisor: **Asst. Prof. Arman Rahman** · Supervisor: **Dr. Mahsa Mirzaei**.
-Funded by **Irish Aid** through the **Ireland Fellows Programme**.
 
 ## Access
 
