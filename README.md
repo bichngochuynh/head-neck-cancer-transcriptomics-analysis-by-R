@@ -32,7 +32,7 @@ flowchart TB
         direction LR
         A[GDC STAR counts<br/>TCGAbiolinks] --> B[Immune deconvolution<br/>MCP-counter · xCell · ESTIMATE]
         B --> C[k-means k = 2<br/>Immune-hot / cold]
-        C --> D[DESeq2 + apeglm<br/>GSEA / ORA · clusterProfiler]
+        C --> D[DESeq2 + apeglm<br/>ORA / GSEA · clusterProfiler]
         C --> E[HPV association · survival<br/>Fisher · Kaplan–Meier · Cox PH]
     end
     subgraph SC["Stage 2 · Single-cell RNA-seq · GSE181919 (23 patients)"]
@@ -40,7 +40,7 @@ flowchart TB
         F[UMI counts] --> G[Per-tissue MAD QC<br/>SCTransform]
         G --> H[PCA · Louvain · UMAP]
         H --> I[Markers + SingleR<br/>cell-type annotation]
-        I --> J[Composition by HPV<br/>pseudobulk DE]
+        I --> J[Composition by HPV<br/>pseudobulk DESeq2 per cell type]
     end
     BULK ==> SC
 ```
@@ -97,11 +97,11 @@ B-cell signal (*SPIB*, *TLR10*) seen in bulk immune-hot tumours.
 │   ├── 01_download_HNSC_TCGAbiolinks.R          # GDC download (STAR counts)
 │   ├── 02_import_HNSC_clinical_2018.R           # clinical / HPV / survival import
 │   ├── 03_run_immune_deconvolution.R            # MCP-counter, xCell, ESTIMATE
-│   ├── 04_plot_immune_classification.R          # immune-hot / cold classification
+│   ├── 04_plot_immune_classification.R          # k-means immune-hot / cold classification
 │   ├── 05_plot_immune_scores_by_tool.R          # validation across tools
 │   ├── 06_run_de_pathway_immune_hot_vs_cold.R   # DESeq2 + GO/KEGG ORA and GSEA
 │   ├── 07_visualise_de_immune_hot_vs_cold.R     # volcano, heatmaps
-│   ├── 08_correlate_genes_with_immunescore.R    # gene–immune score correlation
+│   ├── 08_correlate_genes_with_immunescore.R    # gene–ImmuneScore correlation
 │   └── 09_clinical_association_immune_hot_vs_cold.R  # Fisher, KM, Cox PH
 ├── scRNA_analysis/             # Stage 2: single-cell RNA-seq
 │   └── 01_run_scRNAseq_pipeline.R   # QC → SCTransform → clustering → annotation →
@@ -118,8 +118,8 @@ B-cell signal (*SPIB*, *TLR10*) seen in bulk immune-hot tumours.
 | Data | 520 primary tumours (GDC, TCGAbiolinks); raw counts for DESeq2, TPM for deconvolution; clinical data from cBioPortal PanCancer Atlas |
 | Immune deconvolution | MCP-counter, ESTIMATE and xCell |
 | Immune groups | k-means (k = 2) on seven z-scored MCP-counter immune populations |
-| Differential expression | DESeq2 (`~ImmuneGroup`), apeglm shrinkage; DEGs = BH-adjusted p < 0.05 and abs(log2FC) > 0.5 |
-| Pathways | clusterProfiler ORA and GSEA (GO BP, KEGG) |
+| Differential expression | DESeq2 (`~ImmuneGroup`) on raw counts (genes with < 10 total counts removed), apeglm shrinkage; DEGs = BH-adjusted p < 0.05 and abs(log2FC) > 0.5 |
+| Pathways | clusterProfiler ORA and GSEA (GO BP, KEGG); GSEA ranked by the DESeq2 Wald statistic |
 | Clinical | Fisher's exact test (HPV × immune group); Kaplan–Meier, log-rank, Cox PH |
 
 ### Stage 2: Single-cell RNA-seq (GSE181919)
@@ -127,12 +127,13 @@ B-cell signal (*SPIB*, *TLR10*) seen in bulk immune-hot tumours.
 | Step | Implementation |
 |---|---|
 | Data | 54,239 cells, 23 patients, four tissue compartments (normal, leukoplakia, carcinoma, lymph-node metastasis) |
-| QC | 3 × MAD on UMI counts, detected genes and mito%, computed per tissue compartment |
-| Normalisation | SCTransform, regressing mito% |
-| Clustering | PCA (first 20 PCs) → Louvain → UMAP |
-| Annotation | FindAllMarkers + canonical lineage markers, cross-checked with SingleR (Human Primary Cell Atlas) |
+| QC | 3 × MAD on log10 UMI counts, detected genes and mito%, computed per tissue compartment |
+| Normalisation | SCTransform v2 (glmGamPoi), regressing mito% |
+| Clustering | PCA (first 20 PCs) → shared-nearest-neighbour graph → Louvain (resolution 0.5) → UMAP |
+| Annotation | Cluster markers (FindAllMarkers, Wilcoxon) + canonical lineage markers, cross-checked with SingleR (Human Primary Cell Atlas) |
 | Composition | Patient-level proportions, Wilcoxon rank-sum test with BH correction |
-| Differential expression | Patient-level pseudobulk DESeq2 (all cells and per cell type) |
+| Differential expression | Pseudobulk DESeq2 (`~HPVstatus`): raw counts summed per patient, for all cells and within each cell type (≥ 10 cells per patient, ≥ 3 patients per HPV group); apeglm shrinkage; DEGs = BH-adjusted p < 0.05 and abs(log2FC) > 0.5 |
+| Pathways | ORA (GO BP, KEGG) on all-cell and per-cell-type DEGs; GSEA on the all-cell ranking (Wald statistic) |
 
 ## Rationale behind the analytical choices
 
@@ -173,8 +174,9 @@ reference-based check rather than the final answer.
 
 **Patient as the unit of replication.** Cells from the same patient are not independent, so
 treating thousands of cells as replicates inflates significance. Composition was therefore
-tested on per-patient proportions, and differential expression used patient-level pseudobulk
-profiles.
+tested on per-patient proportions. HPV-associated differential expression, for all cells and
+within each cell type, used patient-level pseudobulk DESeq2 rather than cell-level tests such
+as Wilcoxon or MAST.
 
 ## Validation
 
